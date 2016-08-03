@@ -1,0 +1,154 @@
+Work I did during my internship: 
+===============================
+
+->Studied the HTML5 specification to understand browsing contexts and the
+  security policies laid out for accessing and navigating web pages in the
+  Document Object Model (DOM)
+
+->Analyzed Chromium code-base to identify 
+->where and how  browsing contexts can be created, modified(location) and destroyed during the browser execution
+->document URL and domain can be modified post messages are sent from browsing
+->contexts JavaScript based synchronous and asynchronous network requests are
+->sent
+
+->Tried and not totally successful in identifying how JavaScript objects get the
+->pointers to other objects and if there any security checks for that where the
+->security checks for cross domain window attribute/function access from
+->JavaScript take place
+
+->Modified the Blink rendering engine of Chromium to selectively log certain
+->security decisions made to enforce theSame Origin Policy (SOP)
+
+->Laid foundation for formally verifying Chromium and also for building a
+verified browser security engine using the logs generated
+
+The project and the goal 
+========================
+
+
+
+What is in the HTML5 Specification? 
+===================================
+
+
+
+Understanding the Chromium Code 
+===============================
+
+Chromium
+
+WebKit/Blink
+
+
+DOMWinddow: Located at src/third_party/WebKit/Source/core/frame/DOMWindow.h
+
+DOMWindow is essentially created when a window/tab is opened. DOMWindow can be
+assumed to be a browsing context to a great sense. These are of two types -
+Local and Remote. We are concerned with LocalDOMWindow only. Each DOMWindow has
+an associated Frame and Document objects. Some of the relevant API from
+DOMWindow are:
+
+->location(): This has the location(URL) of the window. On calling location(),a
+->new location object is created if it doesn't exist already from Frame which
+->in-turn takes the location object from Document. So to access the location of
+->a window, the associated frame and document of that window must exist and the
+->url of the document must be set.
+
+->opener(): This gives the opener if there was actually an opener and null
+->otherwise. Be careful with the null pointer.
+
+->parent(): This gives the parent DOMWindow.
+
+->top(): Gives the top DOMWindow.
+
+->postMessage(): window.postmessage() works through this function. This does
+->some basic origin checks and then creates a message event and schedules the
+->post message. The actual security check of sending to same origin is done in
+->the LocalDOMWindow.
+
+->sanitizedCrossDomainAccessErrorMessage() crossDomainAccessErrorMessage()
+
+These two functions can be used for identifying where the same origin checks are
+taking place. For many cross origin accesses Chromium gives error messages as
+"Protocols, domains, and ports must match." or "Blocked a frame from accessing
+cross-origin frame" and these are defined in these two functions. To identify a
+particular origin check, we can do a cross origin test for that feature and the
+function call stack trace in these function where error message is generated can
+lead us to the actual check.
+
+->close(): This closes the window that is passed and the origin check is done
+->here itself.
+
+LocalDOMWindow: Located at
+src/third_party/WebKit/Source/core/frame/LocalDOMWindow.h
+
+LocalDOMWindow is a child class of DOMWindow. While browsing these are actually
+created when a new window/tab is opened, a frame within a window is opened etc.
+I don't know where RemoteDOMWindow  is used.
+
+Some of the relevant API in LocalDOMWindow are:
+
+
+
+
+The Patch 
+=========
+
+All the additional lines of code added are included in the block 
+/**chromium-star begin**/
+------------------------- 
+------------------------- 
+/**chromium-star end**/
+
+The main parts of the patch are: 
+1) localDOMWindow created 
+2) localDOMWindow destroyed 
+3) window location 
+4) window open 
+5) document url 
+6) document domain
+7) Post message 
+8) Async/sync resource request 
+9) Resource response 
+10) Worker request
+
+Other XMLHTTPRequest code is covered in resource requests and so it has been
+commented out. 
+(line numbers in brackets are the lines in patch)
+
+localDOMWindow created(line 178) 
+--------------------------------
+
+localDOMWindows are created using the only constructor defined and this
+constructor is called at only one place i.e, in DocumentWriter*
+DocumentLoader::createWriterFor() in DocumentLoader.cpp
+
+Here, a new window may be created or an existing window may be used. When a new
+window is created, its location is empty. After that, its corresponding
+document's url is set and now its location/origin can be obtained.
+
+This is the only place where new window objects are created. So, all browsing
+context creations are handled by this.
+
+These are uniquely identified using the memory address.
+
+localDOMWindow destroyed(line 96) 
+---------------------------------
+
+Usually these window objects are not destroyed immediately after closing the
+actual window in the browser. We are using memory addresses as unique identifier
+and these can be overwritten. So, keeping track of whether an existing window
+object got destroyed is important.
+
+This is simple done using the destructor function.
+
+window location(line 147) 
+-------------------------
+
+
+
+Other Observations 
+==================
+
+Some Useful Stuff 
+=================

@@ -1,0 +1,411 @@
+diff --git a/third_party/WebKit/Source/bindings/core/v8/custom/V8WindowCustom.cpp b/third_party/WebKit/Source/bindings/core/v8/custom/V8WindowCustom.cpp
+index f85adae..c2e5ac1 100644
+--- a/third_party/WebKit/Source/bindings/core/v8/custom/V8WindowCustom.cpp
++++ b/third_party/WebKit/Source/bindings/core/v8/custom/V8WindowCustom.cpp
+@@ -64,6 +64,10 @@
+ #include "wtf/Assertions.h"
+ #include "wtf/OwnPtr.h"
+ 
++/**chromium-star begin**/
++#include <iostream>
++#include "core/frame/Location.h"
++ /**chromium-star end**/
+ namespace blink {
+ 
+ void V8Window::eventAttributeGetterCustom(const v8::PropertyCallbackInfo<v8::Value>& info)
+@@ -235,9 +239,17 @@ void V8Window::openMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info)
+     }
+     TOSTRING_VOID(V8StringResource<TreatNullAndUndefinedAsNullString>, windowFeaturesString, info[2]);
+ 
++
+     // |impl| has to be a LocalDOMWindow, since RemoteDOMWindows wouldn't have
+     // passed the BindingSecurity check above.
+     DOMWindow* openedWindow = toLocalDOMWindow(impl)->open(urlString, frameName, windowFeaturesString, currentDOMWindow(info.GetIsolate()), enteredDOMWindow(info.GetIsolate()));
++    /**chromium-star begin**/
++    std::cout<<"Window open called\n";
++    std::cout<<" --> by "<<enteredDOMWindow(info.GetIsolate())->location()->origin()<<" and address "<<enteredDOMWindow(info.GetIsolate())<<"\n";
++    std::cout<<" --> in "<<currentDOMWindow(info.GetIsolate())->location()->origin()<<" and address "<<currentDOMWindow(info.GetIsolate())<<"\n";
++    std::cout<<" --> with url "<<String(urlString)<<std::endl;
++    std::cout<<" --> and opened "<<openedWindow<<std::endl;
++    /**chromium-star end**/
+     if (!openedWindow)
+         return;
+ 
+diff --git a/third_party/WebKit/Source/core/dom/Document.cpp b/third_party/WebKit/Source/core/dom/Document.cpp
+index bcd02ab..45aabc9 100644
+--- a/third_party/WebKit/Source/core/dom/Document.cpp
++++ b/third_party/WebKit/Source/core/dom/Document.cpp
+@@ -239,6 +239,10 @@
+ #include "wtf/text/StringBuffer.h"
+ #include "wtf/text/TextEncodingRegistry.h"
+ 
++/**chromium-star begin**/
++#include <iostream>
++#include "core/frame/Location.h"
++/**chromium-star end**/
+ using namespace WTF;
+ using namespace Unicode;
+ 
+@@ -2908,6 +2912,12 @@ void Document::setURL(const KURL& url)
+     if (newURL == m_url)
+         return;
+ 
++    /**chromium-star begin**/
++    std::cout<<"Document url changed\n";
++    std::cout<<" --> of window "<<domWindow()<<"\n";
++    std::cout<<" --> from "<<DOMURLUtilsReadOnly::origin(m_url)<<"\n";
++    std::cout<<" --> to "<<DOMURLUtilsReadOnly::origin(newURL)<<"\n";
++    /**chromium-star end**/
+     m_url = newURL;
+     m_accessEntryFromURL = nullptr;
+     updateBaseURL();
+@@ -4143,7 +4153,16 @@ void Document::setDomain(const String& newDomain, ExceptionState& exceptionState
+         return;
+     }
+ 
++    /**chromium-star begin**/
++        std::cout<<"Document Domain Modified\n";
++        std::cout<<" --> with old origin "<<domWindow()->location()->origin()<<" and address "<<domWindow()<<"\n";
++        std::cout<<" --> with old domain "<<getSecurityOrigin()->domain()<<"\n";
++    /**chromium-star end**/
+     getSecurityOrigin()->setDomainFromDOM(newDomain);
++    /**chromium-star begin**/
++        std::cout<<" --> with new origin "<<domWindow()->location()->origin()<<" and address "<<domWindow()<<"\n";
++        std::cout<<" --> with new domain "<<getSecurityOrigin()->domain()<<"\n";
++    /**chromium-star end**/
+     if (m_frame)
+         m_frame->script().updateSecurityOrigin(getSecurityOrigin());
+ }
+diff --git a/third_party/WebKit/Source/core/frame/LocalDOMWindow.cpp b/third_party/WebKit/Source/core/frame/LocalDOMWindow.cpp
+index 130fa52..24901b3 100644
+--- a/third_party/WebKit/Source/core/frame/LocalDOMWindow.cpp
++++ b/third_party/WebKit/Source/core/frame/LocalDOMWindow.cpp
+@@ -79,7 +79,10 @@
+ #include "public/platform/WebFrameScheduler.h"
+ #include "public/platform/WebScreenInfo.h"
+ #include "wtf/PassOwnPtr.h"
+-
++/**chromium-star begin**/
++#include <iostream>
++#include "core/frame/Location.h"
++/**chromium-star end**/
+ namespace blink {
+ 
+ // Rather than simply inheriting LocalFrameLifecycleObserver like most other
+@@ -457,6 +460,9 @@ void LocalDOMWindow::statePopped(PassRefPtr<SerializedScriptValue> stateObject)
+ LocalDOMWindow::~LocalDOMWindow()
+ {
+     // Cleared when detaching document.
++    /**chromium-star begin**/
++    std::cout<<"LocalDOMWindow Destroyed with pointer "<<this<<"\n";
++    /**chromium-star end**/
+     ASSERT(!m_eventQueue);
+ }
+ 
+@@ -687,7 +693,17 @@ void LocalDOMWindow::postMessageTimerFired(PostMessageTimer* timer)
+     UserGestureIndicator gestureIndicator(timer->userGestureToken());
+ 
+     event->entangleMessagePorts(document());
++    if (timer->targetOrigin()) {
++	    /**chromium-star begin**/
++	    std::cout<<"Post Message Fired with id "<<event<<"\n";
++	    std::cout<<" --> by "<<location()->origin()<<" with address "<<this<<"\n";
++	    std::cout<<" --> to "<<timer->targetOrigin()->toString()<<"\n";
++	    std::cout<<" --> with source "<<event->source()->toLocalDOMWindow()->location()->origin()<<" with address "<<event->source()->toLocalDOMWindow()<<"\n";
++	    //std::cout<<" --> with data "<<event->dataAsSerializedScriptValue()->toWireString()<<"\n";
++	    /**chromium-star end**/
++	}
+     dispatchMessageEventWithOriginCheck(timer->targetOrigin(), event, timer->takeLocation());
++    
+ }
+ 
+ void LocalDOMWindow::removePostMessageTimer(PostMessageTimer* timer)
+@@ -707,7 +723,10 @@ void LocalDOMWindow::dispatchMessageEventWithOriginCheck(SecurityOrigin* intende
+         if (!validTarget) {
+             String message = ExceptionMessages::failedToExecute("postMessage", "DOMWindow", "The target origin provided ('" + intendedTargetOrigin->toString() + "') does not match the recipient window's origin ('" + document()->getSecurityOrigin()->toString() + "').");
+             ConsoleMessage* consoleMessage = ConsoleMessage::create(SecurityMessageSource, ErrorMessageLevel, message, std::move(location));
++            /**chromium-star begin**/
++	    	std::cout<<"Post Message Discarded with id "<<event<<"\n";
+             frameConsole()->addMessage(consoleMessage);
++            /**chromium-star end**/
+             return;
+         }
+     }
+diff --git a/third_party/WebKit/Source/core/frame/Location.cpp b/third_party/WebKit/Source/core/frame/Location.cpp
+index b83f6ff..2719105 100644
+--- a/third_party/WebKit/Source/core/frame/Location.cpp
++++ b/third_party/WebKit/Source/core/frame/Location.cpp
+@@ -39,6 +39,8 @@
+ #include "platform/weborigin/KURL.h"
+ #include "platform/weborigin/SecurityOrigin.h"
+ 
++//vinay
++#include <iostream>
+ namespace blink {
+ 
+ Location::Location(Frame* frame)
+@@ -273,6 +275,14 @@ void Location::setLocation(const String& url, LocalDOMWindow* currentWindow, Loc
+         argv.append(completedURL);
+         activityLogger->logEvent("blinkSetAttribute", argv.size(), argv.data());
+     }
++    /**chromium-star begin**/
++    std::cout<<"Location Modified\n";
++    std::cout<<" --> with currentWindow "<<currentWindow<<" of origin "<<currentWindow->location()->origin()<<"\n";
++    std::cout<<" --> with enteredWindow "<<enteredWindow<<" of origin "<<enteredWindow->location()->origin()<<"\n";
++    std::cout<<" --> with window being accessed "<<m_frame->domWindow()<<" of origin "<<m_frame->domWindow()->location()->origin()<<"\n";
++    std::cout<<" --> with url"<<completedURL.getString()<<"\n";
++    std::cout<<" --> with new origin "<<DOMURLUtilsReadOnly::origin(completedURL)<<"\n";
++    /**chromium-star begin**/
+     m_frame->navigate(*currentWindow->document(), completedURL, locationPolicy == SetLocation::ReplaceThisFrame, UserGestureStatus::None);
+ }
+ 
+diff --git a/third_party/WebKit/Source/core/loader/DocumentLoader.cpp b/third_party/WebKit/Source/core/loader/DocumentLoader.cpp
+index 8f11b8e..bd76e83 100644
+--- a/third_party/WebKit/Source/core/loader/DocumentLoader.cpp
++++ b/third_party/WebKit/Source/core/loader/DocumentLoader.cpp
+@@ -76,6 +76,11 @@
+ #include "wtf/TemporaryChange.h"
+ #include "wtf/text/WTFString.h"
+ 
++/**chromium-star begin**/
++#include <iostream>
++#include "core/frame/Location.h"
++ #include <base/debug/stack_trace.h>
++ /**chromium-star end**/
+ namespace blink {
+ 
+ static bool isArchiveMIMEType(const String& mimeType)
+@@ -657,8 +662,13 @@ DocumentWriter* DocumentLoader::createWriterFor(const DocumentInit& init, const
+     ASSERT(!frame->document() || !frame->document()->isActive());
+     ASSERT(frame->tree().childCount() == 0);
+ 
+-    if (!init.shouldReuseDefaultView())
++    if (!init.shouldReuseDefaultView()) {
+         frame->setDOMWindow(LocalDOMWindow::create(*frame));
++        /**chromium-star begin**/
++        std::cout<<"LocalDOMWindow Created with address "<<frame->localDOMWindow()<<"\n";
++        /**chromium-star end**/
++        
++    }
+ 
+     Document* document = frame->localDOMWindow()->installNewDocument(mimeType, init);
+ 
+@@ -674,6 +684,15 @@ DocumentWriter* DocumentLoader::createWriterFor(const DocumentInit& init, const
+         frame->loader().receivedFirstData();
+ 
+     frame->loader().didBeginDocument();
++    /**chromium-star begin**/
++    std::cout<<"LocalDOMWindow with address "<<frame->localDOMWindow()<<"\n";
++    std::cout<<" --> has origin "<<frame->localDOMWindow()->location()->origin()<<"\n";
++    if (frame->localDOMWindow()->opener()) {
++        std::cout<<" --> has opener "<<frame->localDOMWindow()->opener()->location()->origin()<<" and address "<<frame->localDOMWindow()->opener()<<"\n";
++    }
++    std::cout<<" --> has parent "<<frame->localDOMWindow()->parent()->location()->origin()<<" and address "<<frame->localDOMWindow()->parent()<<"\n";
++    std::cout<<" --> has top "<<frame->localDOMWindow()->top()->location()->origin()<<" and address "<<frame->localDOMWindow()->top()<<std::endl;
++    /**chromium-star end**/
+ 
+     return DocumentWriter::create(document, parsingPolicy, mimeType, encoding);
+ }
+diff --git a/third_party/WebKit/Source/core/loader/DocumentThreadableLoader.cpp b/third_party/WebKit/Source/core/loader/DocumentThreadableLoader.cpp
+index bce49a4..d0090da 100644
+--- a/third_party/WebKit/Source/core/loader/DocumentThreadableLoader.cpp
++++ b/third_party/WebKit/Source/core/loader/DocumentThreadableLoader.cpp
+@@ -56,6 +56,10 @@
+ #include "public/platform/WebURLRequest.h"
+ #include "wtf/Assertions.h"
+ 
++/**chromium-star begin**/
++#include <iostream>
++#include "core/frame/Location.h"
++/**chromium-star end**/
+ namespace blink {
+ 
+ namespace {
+@@ -709,6 +713,11 @@ void DocumentThreadableLoader::handleResponse(unsigned long identifier, const Re
+         }
+     }
+ 
++    /**chromium-star begin**/
++    std::cout<<"Resource Response Received"<<"\n";
++    std::cout<<" --> by "<<getSecurityOrigin()->toString()<<" with address "<<document().domWindow()<<"\n";
++    std::cout<<" --> from "<<response.url().getString()<<"\n";
++    /**chromium-star end**/
+     m_client->didReceiveResponse(identifier, response, std::move(handle));
+ }
+ 
+@@ -916,12 +925,23 @@ void DocumentThreadableLoader::loadRequest(const ResourceRequest& request, Resou
+         } else {
+             InspectorInstrumentation::documentThreadableLoaderFailedToStartLoadingForClient(m_document, m_client);
+         }
++
++        /**chromium-star begin**/
++        std::cout<<"Async Resource request created"<<"\n";
++        std::cout<<" --> by "<<getSecurityOrigin()->toString()<<" with address "<<document().domWindow()<<"\n";
++        std::cout<<" --> for "<<requestURL.getString()<<"\n";
++        /**chromium-star end**/
+         return;
+     }
+ 
+     FetchRequest fetchRequest(request, m_options.initiator, resourceLoaderOptions);
+     if (m_options.crossOriginRequestPolicy == AllowCrossOriginRequests)
+         fetchRequest.setOriginRestriction(FetchRequest::NoOriginRestriction);
++    /**chromium-star begin**/
++    std::cout<<"Sync Resource request created"<<"\n";
++    std::cout<<" --> by "<<getSecurityOrigin()->toString()<<" with address "<<document().domWindow()<<"\n";
++    std::cout<<" --> for "<<requestURL.getString()<<"\n";
++    /**chromium-star end**/
+     Resource* resource = RawResource::fetchSynchronously(fetchRequest, document().fetcher());
+     ResourceResponse response = resource ? resource->response() : ResourceResponse();
+     unsigned long identifier = resource ? resource->identifier() : std::numeric_limits<unsigned long>::max();
+diff --git a/third_party/WebKit/Source/core/loader/FrameLoader.cpp b/third_party/WebKit/Source/core/loader/FrameLoader.cpp
+index 9804316..f2eb6cb 100644
+--- a/third_party/WebKit/Source/core/loader/FrameLoader.cpp
++++ b/third_party/WebKit/Source/core/loader/FrameLoader.cpp
+@@ -100,6 +100,11 @@
+ #include "wtf/text/CString.h"
+ #include "wtf/text/WTFString.h"
+ 
++/**chromium-star begin**/
++#include <iostream>
++#include "core/frame/Location.h"
++/**chromium-star end**/
++
+ using blink::WebURLRequest;
+ 
+ namespace blink {
+diff --git a/third_party/WebKit/Source/core/loader/WorkerThreadableLoader.cpp b/third_party/WebKit/Source/core/loader/WorkerThreadableLoader.cpp
+index 796d3fe..7d098ac 100644
+--- a/third_party/WebKit/Source/core/loader/WorkerThreadableLoader.cpp
++++ b/third_party/WebKit/Source/core/loader/WorkerThreadableLoader.cpp
+@@ -49,6 +49,10 @@
+ #include "wtf/OwnPtr.h"
+ #include "wtf/Vector.h"
+ 
++/**chromium-star begin**/
++#include <iostream>
++#include "core/frame/Location.h"
++/**chromium-star end**/
+ namespace blink {
+ 
+ static PassOwnPtr<Vector<char>> createVectorFromMemoryRegion(const char* data, unsigned dataLength)
+@@ -88,6 +92,12 @@ void WorkerThreadableLoader::start(const ResourceRequest& request)
+     ResourceRequest requestToPass(request);
+     if (!requestToPass.didSetHTTPReferrer())
+         requestToPass.setHTTPReferrer(SecurityPolicy::generateReferrer(m_workerGlobalScope->getReferrerPolicy(), request.url(), m_workerGlobalScope->outgoingReferrer()));
++
++    /**chromium-star begin**/
++    std::cout<<"Worker Resource request created"<<"\n";
++    std::cout<<" --> by "<<request.requestorOrigin()->toString()<<"\n";
++    std::cout<<" --> for "<<request.url().getString()<<"\n";
++    /**chromium-star end**/
+     m_bridge->start(requestToPass, *m_workerGlobalScope);
+     m_workerClientWrapper->setResourceTimingClient(this);
+ }
+diff --git a/third_party/WebKit/Source/core/xmlhttprequest/XMLHttpRequest.cpp b/third_party/WebKit/Source/core/xmlhttprequest/XMLHttpRequest.cpp
+index 3104ef6..c6cad84 100644
+--- a/third_party/WebKit/Source/core/xmlhttprequest/XMLHttpRequest.cpp
++++ b/third_party/WebKit/Source/core/xmlhttprequest/XMLHttpRequest.cpp
+@@ -78,6 +78,11 @@
+ #include "wtf/StdLibExtras.h"
+ #include "wtf/text/CString.h"
+ 
++/**chromium-star begin**/
++#include <iostream>
++#include "core/frame/Location.h"
++ #include <base/debug/stack_trace.h>
++/**chromium-star end**/
+ namespace blink {
+ 
+ namespace {
+@@ -225,6 +230,11 @@ XMLHttpRequest::XMLHttpRequest(ExecutionContext* context, PassRefPtr<SecurityOri
+     , m_downloadingToFile(false)
+     , m_responseTextOverflow(false)
+ {
++    // /**chromium-star begin**/
++    // std::cout<<"XMLHTTPRequest "<<this<<" Created\n";
++    // //std::cout<<" --> with url "<<context->url().getString()<<"\n";
++    // std::cout<<" --> with security origin "<<getSecurityOrigin()->toString()<<"\n";
++    // /**chromium-star end**/
+ }
+ 
+ XMLHttpRequest::~XMLHttpRequest()
+@@ -618,6 +628,7 @@ void XMLHttpRequest::open(const AtomicString& method, const KURL& url, bool asyn
+         changeState(OPENED);
+     else
+         m_state = OPENED;
++
+ }
+ 
+ bool XMLHttpRequest::initSend(ExceptionState& exceptionState)
+@@ -649,36 +660,71 @@ void XMLHttpRequest::send(const ArrayBufferOrArrayBufferViewOrBlobOrDocumentOrSt
+ 
+     if (body.isNull()) {
+         send(String(), exceptionState);
++        // /**chromium-star begin**/
++        // std::cout<<"Sending XMLHTTPRequest "<<this<<"\n";
++        // std::cout<<" --> with method "<<m_method.getString()<<"\n";
++        // std::cout<<" --> with url "<<url().getString()<<"\n";
++        // /**chromium-star end**/
+         return;
+     }
+ 
+     if (body.isArrayBuffer()) {
+         send(body.getAsArrayBuffer(), exceptionState);
++        // /**chromium-star begin**/
++        // std::cout<<"Sending XMLHTTPRequest "<<this<<"\n";
++        // std::cout<<" --> with method "<<m_method.getString()<<"\n";
++        // std::cout<<" --> with url "<<url().getString()<<"\n";
++        // /**chromium-star end**/
+         return;
+     }
+ 
+     if (body.isArrayBufferView()) {
+         send(body.getAsArrayBufferView(), exceptionState);
++        // /**chromium-star begin**/
++        // std::cout<<"Sending XMLHTTPRequest "<<this<<"\n";
++        // std::cout<<" --> with method "<<m_method.getString()<<"\n";
++        // std::cout<<" --> with url "<<url().getString()<<"\n";
++        // /**chromium-star end**/
+         return;
+     }
+ 
+     if (body.isBlob()) {
+         send(body.getAsBlob(), exceptionState);
++        // /**chromium-star begin**/
++        // std::cout<<"Sending XMLHTTPRequest "<<this<<"\n";
++        // std::cout<<" --> with method "<<m_method.getString()<<"\n";
++        // std::cout<<" --> with url "<<url().getString()<<"\n";
++        // /**chromium-star end**/
+         return;
+     }
+ 
+     if (body.isDocument()) {
+         send(body.getAsDocument(), exceptionState);
++        // /**chromium-star begin**/
++        // std::cout<<"Sending XMLHTTPRequest "<<this<<"\n";
++        // std::cout<<" --> with method "<<m_method.getString()<<"\n";
++        // std::cout<<" --> with url "<<url().getString()<<"\n";
++        // /**chromium-star end**/
+         return;
+     }
+ 
+     if (body.isFormData()) {
+         send(body.getAsFormData(), exceptionState);
++        // /**chromium-star begin**/
++        // std::cout<<"Sending XMLHTTPRequest "<<this<<"\n";
++        // std::cout<<" --> with method "<<m_method.getString()<<"\n";
++        // std::cout<<" --> with url "<<url().getString()<<"\n";
++        // /**chromium-star end**/
+         return;
+     }
+ 
+     ASSERT(body.isString());
+     send(body.getAsString(), exceptionState);
++    // /**chromium-star begin**/
++    // std::cout<<"Sending XMLHTTPRequest "<<this<<"\n";
++    // std::cout<<" --> with method "<<m_method.getString()<<"\n";
++    // std::cout<<" --> with url "<<url().getString()<<"\n";
++    // /**chromium-star end**/
+ }
+ 
+ bool XMLHttpRequest::areMethodAndURLValidForSend()
